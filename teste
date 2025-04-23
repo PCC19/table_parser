@@ -1,4 +1,10 @@
 -----
-1d6 2d8 3d10
-[1d6+5 paulo]
+Voces encontram:
+	Moedas:
+1d10 gp
+1d100 cp
+	Gemas:
+[1d10 gemas]
+	Itens:
+[1d6 items]
 fim
