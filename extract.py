@@ -1,29 +1,100 @@
-import pdfplumber
-import argparse
-import os
+import sys
+from pdf2image import convert_from_path
+from PIL import Image
+import pytesseract
+import pathlib
 
-def extract_text(pdf_path, txt_path):
-    with pdfplumber.open(pdf_path) as pdf:
-        text = ""
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text
-    with open(txt_path, "w", encoding="utf-8") as txt_file:
-        txt_file.write(text)
+import re
+
+def get_line(text, word):
+    for line in text.splitlines():
+        if word.casefold() in line.casefold():
+            return line
+    return 'na'
+
+def extract_word(text, word):
+    line = get_line(text, word)
+    last_colon = line.rfind(':')  # Find the last colon
+    if last_colon == -1:
+        return 'na'  # No colon found
+    # Get substring after the colon
+    after_colon = line[last_colon+1:]
+    # Strip leading spaces
+    after_colon = after_colon.lstrip()
+    # Find the first space in the remaining string
+    first_space = after_colon.find(' ')
+    if first_space == -1:
+        return after_colon.lower()  # No space found; return the rest
+    return after_colon[:first_space].lower()
+
+def process_page_pair(page1_img, page2_img, pair_num):
+    width, height = page1_img.size
+    block_height = height // 5  # 5 horizontal blocks per page
+    output = []
+    nome = []
+    stats = []
+    full_text = []
+
+    # Process first page (left blocks only)
+    for block_idx in range(5):
+        y0 = block_idx * block_height
+        y1 = (block_idx + 1) * block_height if block_idx < 4 else height
+        left_box = (0, y0, width//2, y1)
+        crop = page1_img.crop(left_box)
+        text = pytesseract.image_to_string(crop).strip()
+        #output.append(f"[Pair {pair_num} Page 1 Block {block_idx+1}]\n{text}")
+        danger = extract_word(text, "danger")
+        climate = extract_word(text, "climate")
+        terrain = extract_word(text, "terrain")
+        attribute = extract_word(text, "attribute")
+        encounter = extract_word(text, "encounter")
+        add = extract_word(text, "additional")
+        xp = extract_word(text, "xp")
+        nome.append('_'.join([danger, climate, terrain, attribute, encounter, add, xp]) + '.enc')
+        stats.append('STATS: | ' + ' | '.join([danger, climate, terrain, attribute, encounter, add, xp]) + ' |')
+        #output.append(f"[Page 1 Block {block_idx+1}]\n{nome}")
+        output.append(stats[block_idx])
+        
+    # Process second page (both columns)
+    for block_idx in range(5):
+        y0 = block_idx * block_height
+        y1 = (block_idx + 1) * block_height if block_idx < 4 else height
+        
+        # Left column
+        left_box = (0, y0, width//2, y1)
+        left_crop = page2_img.crop(left_box)
+        left_text = pytesseract.image_to_string(left_crop).strip()
+        
+        # Right column
+        right_box = (width//2, y0, width, y1)
+        right_crop = page2_img.crop(right_box)
+        right_text = pytesseract.image_to_string(right_crop).strip()
+        
+        output.append(f"[Pair {pair_num} Page 2 Block {block_idx+1}]\n{left_text}\n{right_text}")
+
+        full_text.append(f"[Pair {pair_num} Page 2 Block {block_idx+1}]\n{stats[block_idx]}\n{left_text}\n{right_text}")
+
+    for i in range(5):
+        with open(nome[i], 'w', encoding='utf-8') as f:
+            f.write(full_text[i])
+        print(f"Extracted text saved to: {nome[i]}")
+
+    return '\n\n'.join(output)
+
+def extract_paired_pages(pdf_path, output_txt='output.txt'):
+    images = convert_from_path(pdf_path, dpi=300)
+    all_text = []
+    
+    # Process pages in pairs
+    for i in range(0, len(images), 2):
+        if i+1 >= len(images):
+            break  # Skip last page if odd number
+        pair_text = process_page_pair(images[i], images[i+1], i//2 + 1)
+    print("finished !")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extract all text from a PDF and save as TXT.")
-    parser.add_argument("pdf_file", help="Path to the PDF file")
-    parser.add_argument("--output", "-o", help="Output TXT file path (optional)")
-    args = parser.parse_args()
-
-    pdf_file = args.pdf_file
-    if args.output:
-        txt_file = args.output
-    else:
-        txt_file = os.path.splitext(pdf_file)[0] + ".txt"
-
-    extract_text(pdf_file, txt_file)
-    print(f"Text extracted to {txt_file}")
-
+    if len(sys.argv) != 2:
+        print("Usage: python script.py input.pdf")
+        sys.exit(1)
+    txt_filename = pathlib.Path(sys.argv[1]).with_suffix('.txt')
+    extract_paired_pages(sys.argv[1], txt_filename)
