@@ -4,10 +4,36 @@ from PIL import Image
 import pytesseract
 import pathlib
 
+import re
+
+def get_line(text, word):
+    for line in text.splitlines():
+        if word.casefold() in line.casefold():
+            return line
+    return 'na'
+
+def extract_word(text, word):
+    line = get_line(text, word)
+    last_colon = line.rfind(':')  # Find the last colon
+    if last_colon == -1:
+        return 'na'  # No colon found
+    # Get substring after the colon
+    after_colon = line[last_colon+1:]
+    # Strip leading spaces
+    after_colon = after_colon.lstrip()
+    # Find the first space in the remaining string
+    first_space = after_colon.find(' ')
+    if first_space == -1:
+        return after_colon.lower()  # No space found; return the rest
+    return after_colon[:first_space].lower()
+
 def process_page_pair(page1_img, page2_img, pair_num):
     width, height = page1_img.size
     block_height = height // 5  # 5 horizontal blocks per page
     output = []
+    nome = []
+    stats = []
+    full_text = []
 
     # Process first page (left blocks only)
     for block_idx in range(5):
@@ -16,8 +42,19 @@ def process_page_pair(page1_img, page2_img, pair_num):
         left_box = (0, y0, width//2, y1)
         crop = page1_img.crop(left_box)
         text = pytesseract.image_to_string(crop).strip()
-        output.append(f"[Pair {pair_num} Page 1 Block {block_idx+1}]\n{text}")
-
+        #output.append(f"[Pair {pair_num} Page 1 Block {block_idx+1}]\n{text}")
+        danger = extract_word(text, "danger")
+        climate = extract_word(text, "climate")
+        terrain = extract_word(text, "terrain")
+        attribute = extract_word(text, "attribute")
+        encounter = extract_word(text, "encounter")
+        add = extract_word(text, "additional")
+        xp = extract_word(text, "xp")
+        nome.append('_'.join([danger, climate, terrain, attribute, encounter, add, xp]) + '.enc')
+        stats.append('STATS: | ' + ' | '.join([danger, climate, terrain, attribute, encounter, add, xp]) + ' |')
+        #output.append(f"[Page 1 Block {block_idx+1}]\n{nome}")
+        output.append(stats[block_idx])
+        
     # Process second page (both columns)
     for block_idx in range(5):
         y0 = block_idx * block_height
@@ -35,6 +72,13 @@ def process_page_pair(page1_img, page2_img, pair_num):
         
         output.append(f"[Pair {pair_num} Page 2 Block {block_idx+1}]\n{left_text}\n{right_text}")
 
+        full_text.append(f"[Pair {pair_num} Page 2 Block {block_idx+1}]\n{stats[block_idx]}\n{left_text}\n{right_text}")
+
+    for i in range(5):
+        with open(nome[i], 'w', encoding='utf-8') as f:
+            f.write(full_text[i])
+        print(f"Extracted text saved to: {nome[i]}")
+
     return '\n\n'.join(output)
 
 def extract_paired_pages(pdf_path, output_txt='output.txt'):
@@ -46,13 +90,7 @@ def extract_paired_pages(pdf_path, output_txt='output.txt'):
         if i+1 >= len(images):
             break  # Skip last page if odd number
         pair_text = process_page_pair(images[i], images[i+1], i//2 + 1)
-        all_text.append(pair_text)
-    
-    # Join pairs with form feed separator
-    final_text = '\n========\f\n'.join(all_text)
-    with open(output_txt, 'w', encoding='utf-8') as f:
-        f.write(final_text)
-    print(f"Extracted text saved to: {output_txt}")
+    print("finished !")
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -60,4 +98,3 @@ if __name__ == "__main__":
         sys.exit(1)
     txt_filename = pathlib.Path(sys.argv[1]).with_suffix('.txt')
     extract_paired_pages(sys.argv[1], txt_filename)
-

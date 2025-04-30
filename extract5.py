@@ -35,7 +35,6 @@ def extract_blocks_from_pdf(pdf_path, output_txt='output.txt'):
             page_text.append(f"[Page {page_num+1} Block {block_idx+1} Right]\n{right_text.strip()}")
 
         all_text.append('\n\n'.join(page_text))
- wa
     # Join all pages with form feed separator
     final_text = '\n========\f\n'.join(all_text)
     txt_filename = pathlib.Path(pdf_path).with_suffix('.txt')
