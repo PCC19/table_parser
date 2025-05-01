@@ -29,13 +29,17 @@ def extract_word(text, word):
 
 def process_page_pair(page1_img, page2_img, pair_num):
     width, height = page1_img.size
-    block_height = height // 5  # 5 horizontal blocks per page
+    if height < 4000:
+        n = 2
+    else:
+        n = 5
+    block_height = height // n  # 5 horizontal blocks per page
     output = []
     nome = []
     stats = []
     full_text = []
 
-    for block_idx in range(5):
+    for block_idx in range(n):
         # Process first page (left blocks only)
         y0 = block_idx * block_height
         y1 = (block_idx + 1) * block_height if block_idx < 4 else height
